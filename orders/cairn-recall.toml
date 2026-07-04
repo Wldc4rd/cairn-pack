@@ -1,0 +1,13 @@
+# Session-start recall digest regeneration (vault-backed memory pack).
+# TWO-KEY DEFAULT-DENY: the command no-ops unless BOTH .gc/cairn.enabled
+# (pack master, reviewed) AND .gc/cairn-recall.enabled (this wiring) exist —
+# AND .beads/PRIME.md already contains the <!-- brain-recall:begin/end -->
+# marker region (adding the markers is the deliberate cutover act).
+# ARM:  touch .gc/cairn-recall.enabled     REVERSE: rm the marker/this file.
+# When armed: rewrites ONLY the marker-fenced region with the shared
+# city+nation digest (pinned -> open handoffs -> newest, token-budgeted).
+[order]
+description = "Recall digest -> PRIME.md marker region (two-key default-deny; arm: touch .gc/cairn-recall.enabled)"
+trigger = "cooldown"
+interval = "5m"
+exec = "gc cairn recall --write-prime"

@@ -1,0 +1,10 @@
+name = "cairn"
+description = "Vault-backed agent memory — memory_* tools over the nested brain hierarchy (agent/city/nation scope chain; default-off; writes secret-linted + confined)"
+command = "../scripts/memory_mcp.py"
+
+# NOTE: agents in one city share a provider-native .mcp.json, so this payload
+# must be identical for every agent — no per-agent template vars here. The
+# server derives the calling agent's identity at runtime from the session
+# environment (CAIRN_AGENT > GC_ALIAS > GC_AGENT).
+[env]
+CAIRN_CITY_ROOT = "{{.CityRoot}}"

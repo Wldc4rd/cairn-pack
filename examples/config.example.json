@@ -1,0 +1,13 @@
+{
+  "city_name": "example-city",
+  "write_root": "/home/user/vault/Gas Cities",
+  "read_roots": [],
+  "nation_write": "propose",
+  "sync": { "mode": "vault" },
+  "budgets": {
+    "digest_token_budget": 7000,
+    "entry_char_cap": 1200,
+    "max_note_bytes": 16384
+  },
+  "lint": { "banned_strings": [] }
+}
