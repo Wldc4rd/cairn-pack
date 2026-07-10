@@ -211,13 +211,34 @@ Per-city config (`.gc/services/cairn/config.json`, see
 `examples/config.example.json`):
 
 - **`sync.mode: "vault"`** — the tree lives inside a vault whose own sync
-  machinery commits. **Cairn never runs git in vault mode.**
+  machinery commits. **Cairn never runs git in vault mode** — so *before you
+  enable*, make sure that sync already checks out and covers the `Gas Cities/`
+  tree on this box; cairn will not create or fetch it for you. (First fleet
+  deploy hit this: a city's enable stayed correctly blocked until its vault
+  machinery covered the tree.)
 - **`sync.mode: "repo"`** — the city's slice lives in a standalone git clone,
   synced by `gc cairn sync` through a manifest-guarded wrapper
   (`gc-brain.toml` fences every git call; `core.symlinks=false` at init).
 - **`read_roots`** — extra read-only mounts merged into recall/search (e.g. a
   one-way mirror of the shared tree). Never point `write_root` at a mirror
   something else overwrites.
+
+> **⚠️ `write_root` is the tree BASE — cairn appends the city name (rollout
+> lesson).** Point `write_root` at the `Gas Cities/` **base**, *not* at
+> `Gas Cities/<city>`. Cairn appends this city's own name, so base
+> `…/Gas Cities` → stones land at `…/Gas Cities/<city>/…`. Set the deep per-city
+> path and it double-nests to `…/Gas Cities/<city>/<city>/…` — the *writes-
+> nowhere* trap: cairn reports success while nothing lands where your sync
+> expects. After enabling, confirm with a test `remember` (or
+> `gc cairn continuity-status`) that the first stone appears at your sync source.
+
+> **Recommended multi-box fleet topology (the rollout standard).** On remote
+> boxes, give each city its **own city-local vault** (`sync.mode: "vault"`,
+> `write_root` at that box's `Gas Cities/` base) and mount a **one-way read-only
+> mirror of the shared nation `brain/`** through `read_roots`. Leave
+> `nation_write` at its default — nation-scope stones route to the fleet steward,
+> who lands them centrally, and they flow back to every city via the read-mirror.
+> No shared *writable* root need exist (rare to do safely across machines).
 
 **Write ownership** (conflict-free by construction): each agent stacks only its
 own cairn; city brains are written by that city; the nation brain is written by
