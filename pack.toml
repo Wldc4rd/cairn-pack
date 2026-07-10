@@ -1,5 +1,5 @@
 [pack]
 name = "cairn"
-version = "0.1.0"
+version = "0.2.0"
 schema = 2
 description = "Vault-backed agent memory: one markdown note per memory in a nested brain hierarchy (agent -> city -> nation), scope-chained recall with a token-budgeted session-start digest, full-text search, handoff notes that surface first while their bead is open. Any folder of markdown is an Obsidian vault. Ships default-off."

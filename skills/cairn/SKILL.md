@@ -47,6 +47,47 @@ un-promoted knowledge findable. If you found a city-relevant fact buried in a
 sibling's cairn, promote it (re-remember at city scope) so the next reader
 doesn't need the search.
 
+## Continuity Protocol
+
+Some travelers carry a gauge — a live reading of how much road is left before
+the light fails. **This section binds ONLY the agents the city's `continuity`
+config names with the gauge enabled.** If your turns carry no `context-gauge:`
+line, you are not one of them: don't seed a notepad, don't self-hand-off, don't
+adopt these thresholds. An agent with no gauge measuring for it has no business
+managing its context by feel — that's cosplay, and it misleads the next
+traveler. Everything below is for the gauged.
+
+- **Boot from the stones, not from memory.** Starting a shift, read your
+  **notepad** in full and your **latest terminated diary entry**, then open your
+  first report with the 4-line boot echo — *in flight / settled (won't re-open) /
+  waiting on / echo-token* — quoting the token from the notepad's first line. The
+  token proves you read it; never guess it. Derive live state from the work
+  tracker + notes, never from a remembered conversation.
+- **The notepad is a snapshot, not a log.** Every line must be true *now*; order
+  carries no time. Stamp each bullet `(M/D HHMMZ)` UTC at its start. It carries
+  only what the tracker cannot: *settled* (with provenance — who ruled it, when,
+  quoted, and its scope), gotchas, the *why*, the one-line *next*. Prune freely;
+  git and the diary keep the history. Staleness is section-aware: in-flight/
+  waiting lines go SUSPECT within the hour and need RE-ASSESS within a day;
+  settled/gotcha lines age slower. Re-affirm by citing the check, not by
+  refreshing a stamp.
+- **The diary is the episodic WAL.** Append a line at each milestone, not only at
+  death. At handoff, finish it (≤30 lines) and end with the terminator line
+  exactly — no terminator, and your successor treats the entry as a crash
+  artifact and trusts the tracker instead.
+- **Milestones land in the tracker as you go.** The bead/issue store is the
+  durable state; a fresh session rebuilds in-flight context from it — note at
+  claim, decision, risk, and close.
+- **Hand off on the gauge, not on nerves.** Below the normal threshold, deferring
+  work "to save context" is prohibited — do it now or hand off now. In the
+  handoff band, finish the current unit (or ~10 minutes, whichever is smaller),
+  update the notepad, finish the diary, then `gc cairn continuity-handoff`. In
+  the urgent band do that at once; past the ceiling, stop mid-unit — a stub diary
+  with a terminator beats a truncated session. **Resetting is a shift change, not
+  a failure.**
+
+*Read the stones, add yours, hand off clean.*
+
 ## Hard rules
 
 - **Never store credentials** — writes are secret-linted, but don't lean on

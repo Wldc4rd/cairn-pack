@@ -19,12 +19,16 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import re
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import memory_common as mc  # noqa: E402
+import continuity_common as cc  # noqa: E402
 
 
 def _city() -> Path:
@@ -248,6 +252,211 @@ def cmd_disable(args) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# Continuity layer commands (gauge companion; default-OFF behind the enable gate)
+# ---------------------------------------------------------------------------
+
+_NOTEPAD_TEMPLATE = """\
+---
+key: notepad-{agent}
+type: handoff
+created: {stamp}
+updated: {stamp}
+pinned: true
+tags: notepad, handoff, wal, continuity
+---
+
+echo-token: {token}
+
+# NOTEPAD — {agent} (working-memory head)
+
+> **Contract:** full rules live in your prompt's *Continuity Protocol* section — this
+> header is only the read-time reminders. This file is a SNAPSHOT (every line currently
+> true; order != time; stamp bullets `(M/D HHMMZ)` UTC at bullet start). It carries ONLY
+> what the issue tracker cannot: settled (with provenance+scope), gotchas, the why, next.
+> At boot: read this IN FULL + the latest terminated diary entry, then give the 4-line
+> boot echo INCLUDING the echo-token above. At handoff: re-affirm-or-drop every line
+> (cite the check), rotate the echo-token, diary entry <=30 lines ending `{terminator}`.
+
+## In flight
+<!-- what you're mid-way through + the next concrete step; newest-first; stamp each bullet -->
+
+## Settled — do NOT re-open or re-litigate
+<!-- only with provenance: who ruled it, when, quote/bead, and scope ("tonight" != "forever") -->
+
+## Waiting on
+<!-- external blockers; newest-first; stamp each bullet -->
+
+## Gotchas / active constraints
+<!-- hard-won constraints and the why; these age slower than in-flight lines -->
+"""
+
+
+def _rotate_notepad(text: str, new_tok: str, stamp: str):
+    """Return (new_text, token_rotated, stamp_refreshed)."""
+    text, n_tok = re.subn(r"^echo-token:\s*\S+", f"echo-token: {new_tok}",
+                          text, count=1, flags=re.MULTILINE)
+    text, n_stamp = re.subn(r"^updated:\s*.*$", f"updated: {stamp}",
+                            text, count=1, flags=re.MULTILINE)
+    return text, bool(n_tok), bool(n_stamp)
+
+
+def cmd_continuity_init(args) -> int:
+    city = _city()
+    cfg = mc.load_config(city)
+    mc.require_enabled(city)
+    ccfg = cc.continuity_cfg(cfg)
+    agents = cc.target_agents(ccfg, args.agent or None)
+    root = mc.write_root(city, cfg)
+    print(f"continuity-init{' [DRY-RUN]' if args.dry_run else ''}")
+    for agent in agents:
+        brain = cc.brain_dir(city, cfg, agent)
+        np, dd = cc.notepad_path(brain), cc.diary_dir(brain)
+        print(f"  agent {agent}: brain {brain}")
+        if dd.is_dir():
+            print(f"    - diary/ exists ({len(cc.diary_entries(dd))} entries) — kept")
+        else:
+            print("    - diary/ CREATE")
+            if not args.dry_run:
+                mc.confine_write(root, dd)
+                dd.mkdir(parents=True, exist_ok=True)
+        if np.is_file():
+            print(f"    - notepad.md exists (echo-token {cc.read_echo_token(np) or '?'}) — kept")
+        else:
+            tok = cc.new_token()
+            print(f"    - notepad.md CREATE (echo-token {tok})")
+            if not args.dry_run:
+                brain.mkdir(parents=True, exist_ok=True)
+                mc.confine_write(root, np)
+                np.write_text(_NOTEPAD_TEMPLATE.format(
+                    agent=agent, stamp=cc.utc_now().strftime("%Y-%m-%dT%H%M%SZ"),
+                    token=tok, terminator=cc.TERMINATOR))
+    return 0
+
+
+def cmd_continuity_handoff(args) -> int:
+    city = _city()
+    cfg = mc.load_config(city)
+    mc.require_enabled(city)
+    ccfg = cc.continuity_cfg(cfg)
+    agent = args.agent or cc.resolve_agent(cc.env_identity(), cc.enabled_agents(ccfg))
+    if not agent:
+        print("continuity-handoff: cannot resolve agent from env "
+              "(CAIRN_AGENT/GC_ALIAS) against enabled_agents; pass --agent", file=sys.stderr)
+        return 2
+    brain = cc.brain_dir(city, cfg, agent)
+    np, dd = cc.notepad_path(brain), cc.diary_dir(brain)
+
+    latest = cc.latest_diary(dd)
+    term_ok = False
+    if latest is None:
+        msg = f"no diary entry in {dd} — write one (with terminator) first"
+        if not args.force:
+            print(f"continuity-handoff: {msg}", file=sys.stderr)
+            return 3
+        print(f"continuity-handoff: WARNING {msg} (--force)")
+    else:
+        term_ok = cc.has_terminator(dd / latest)
+        if not term_ok:
+            msg = (f"latest diary {latest} has NO terminator line "
+                   f"('{cc.TERMINATOR}') — finish the entry first")
+            if not args.force:
+                print(f"continuity-handoff: {msg}", file=sys.stderr)
+                return 3
+            print(f"continuity-handoff: WARNING {msg} (--force)")
+
+    now = cc.utc_now()
+    stamp = now.strftime("%Y-%m-%dT%H%M%SZ")
+    new_tok = cc.new_token()
+    old_tok = cc.read_echo_token(np)
+    try:
+        text = np.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        print(f"continuity-handoff: cannot read notepad {np}: {e}", file=sys.stderr)
+        return 2
+    new_text, rot, stamped = _rotate_notepad(text, new_tok, stamp)
+
+    bead = args.bead or "(unset — pass --bead)"
+    body = f"notepad: {np} | diary: {latest or '(none)'} | bead: {bead}"
+    subject = args.subject or f"{agent} handoff — {bead}"
+    diary_label = "(none)" if latest is None else (
+        f"{latest} [{'terminator OK' if term_ok else 'NO TERMINATOR (--force override)'}]")
+
+    print(f"continuity-handoff{' [DRY-RUN]' if args.dry_run else ''} — agent {agent}")
+    print(f"  diary latest : {diary_label}")
+    print(f"  echo-token   : {old_tok} -> {new_tok}"
+          f"{'' if rot else '  (WARN: no echo-token line to rotate)'}")
+    print(f"  updated stamp: {'refreshed -> ' + stamp if stamped else '(no updated: line)'}")
+    print(f"  pointer body : {body}")
+
+    if args.dry_run:
+        print(f"  gc handoff   : gc handoff {subject!r} {body!r}")
+        print("  DRY-RUN: notepad NOT written, gc handoff NOT executed.")
+        return 0
+
+    mc.confine_write(mc.write_root(city, cfg), np)
+    tmp = np.with_suffix(".md.tmp")
+    tmp.write_text(new_text)
+    os.replace(tmp, np)
+    print("  notepad rotation committed. Executing gc handoff...")
+    return subprocess.run(["gc", "handoff", subject, body]).returncode
+
+
+def cmd_continuity_status(args) -> int:
+    city = _city()
+    cfg = mc.load_config(city)
+    ccfg = cc.continuity_cfg(cfg)
+    agents = cc.target_agents(ccfg, args.agent or None)
+    ttl = ccfg["ttl"]
+    now = cc.utc_now()
+    info: dict = {
+        "pack_enabled": mc.is_enabled(city),
+        "continuity_enabled": bool(ccfg.get("enabled")),
+        "enabled_agents": cc.enabled_agents(ccfg),
+        "agents": {},
+    }
+    for agent in agents:
+        a: dict = {}
+        try:
+            brain = cc.brain_dir(city, cfg, agent)
+            a["brain"] = str(brain)
+            np, dd = cc.notepad_path(brain), cc.diary_dir(brain)
+            if np.is_file():
+                scan = cc.notepad_scan(np, now, ttl)
+                a["notepad"] = {
+                    "echo_token": cc.read_echo_token(np),
+                    "newest_stamp_age_min": (int((now - scan["newest"]).total_seconds() / 60)
+                                             if scan.get("newest") else None),
+                    "suspect": scan.get("suspect"),
+                    "reassess": scan.get("reassess"),
+                    "unstamped": scan.get("unstamped"),
+                }
+            else:
+                a["notepad"] = None
+            entries = cc.diary_entries(dd)
+            a["diary"] = {
+                "count": len(entries),
+                "latest": entries[-1] if entries else None,
+                "latest_terminator": cc.has_terminator(dd / entries[-1]) if entries else None,
+            }
+            st = cc.state_path(city, ccfg, agent)
+            if st.is_file():
+                try:
+                    sd = json.loads(st.read_text())
+                except (OSError, json.JSONDecodeError):
+                    sd = {}
+                at = float(sd.get("at") or 0)
+                a["gauge_heartbeat_sec"] = int(time.time() - at) if at > 0 else None
+                a["consecutive_urgent"] = sd.get("consecutive_urgent")
+            else:
+                a["gauge_heartbeat_sec"] = None
+        except mc.MemoryError_ as e:
+            a["error"] = str(e)
+        info["agents"][agent] = a
+    print(json.dumps(info, indent=2))
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(prog=mc.PACK_NAME)
     sub = ap.add_subparsers(required=True)
@@ -302,6 +511,22 @@ def main() -> int:
     p.add_argument("--reviewed-by", dest="reviewed", default="")
 
     sub.add_parser("disable").set_defaults(fn=cmd_disable)
+
+    p = sub.add_parser("continuity-init"); p.set_defaults(fn=cmd_continuity_init)
+    p.add_argument("--agent", default="", help="single agent (default: all enabled_agents)")
+    p.add_argument("--dry-run", action="store_true", help="show actions, write nothing")
+
+    p = sub.add_parser("continuity-handoff"); p.set_defaults(fn=cmd_continuity_handoff)
+    p.add_argument("--bead", default="", help="bead/issue id to point the successor at")
+    p.add_argument("--subject", default="", help="handoff mail subject (default derived)")
+    p.add_argument("--agent", default="", help="agent (default: resolved from env identity)")
+    p.add_argument("--dry-run", action="store_true",
+                   help="verify + print the plan; write nothing, exec nothing")
+    p.add_argument("--force", action="store_true",
+                   help="proceed even if the latest diary lacks a terminator")
+
+    p = sub.add_parser("continuity-status"); p.set_defaults(fn=cmd_continuity_status)
+    p.add_argument("--agent", default="", help="single agent (default: all enabled_agents)")
 
     args = ap.parse_args()
     try:

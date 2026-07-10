@@ -9,5 +9,12 @@
     "entry_char_cap": 1200,
     "max_note_bytes": 16384
   },
-  "lint": { "banned_strings": [] }
+  "lint": { "banned_strings": [] },
+  "continuity": {
+    "enabled": false,
+    "enabled_agents": [],
+    "thresholds": { "normal": 60, "handoff": 75, "urgent": 85 },
+    "window": { "default": 200000, "overrides": { "claude-opus-4-8": 1000000 } },
+    "ttl": { "suspect_h": 1, "reassess_h": 24, "settled_suspect_h": 48, "settled_reassess_h": 168 }
+  }
 }

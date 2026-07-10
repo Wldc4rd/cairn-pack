@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import memory_common as mc  # noqa: E402
 
 PROTOCOL_VERSION = "2024-11-05"
-SERVER_INFO = {"name": mc.PACK_NAME, "version": "0.1.0"}
+SERVER_INFO = {"name": mc.PACK_NAME, "version": "0.2.0"}
 
 
 def tool_remember(city: Path, cfg: dict, args: dict) -> str:

@@ -75,6 +75,44 @@ region. Adding the markers is your explicit cutover act. The digest's first
 line tells fresh sessions to run `gc cairn recall` for their personalized
 agent-scope chain.
 
+## Continuity (context gauge + handoff protocol)
+
+An optional layer for agents that burn long sessions: a **context-usage gauge**
+that tees the agent's *real* context % into each turn (so it acts on data, not
+transcript "feel"), plus a disciplined **notepad + diary + handoff** protocol so
+a fresh session recovers state from a durable WAL instead of memory. **Default-
+OFF and triple-gated** — the pack enable marker, `continuity.enabled`, and the
+session's agent being listed in `continuity.enabled_agents`. An unlisted agent
+gets no gauge and is explicitly exempt from the protocol (anti-cosplay).
+
+```sh
+# 1) configure: add a "continuity" block to .gc/services/cairn/config.json
+#    (see examples/config.example.json): enabled + enabled_agents + thresholds.
+# 2) seed each in-scope agent's notepad + diary (idempotent):
+gc cairn continuity-init
+# 3) inspect health any time (notepad age, TTL tiers, diary, gauge heartbeat):
+gc cairn continuity-status
+# 4) the disciplined handoff (verify diary -> rotate echo-token -> pointer body):
+gc cairn continuity-handoff --bead <id>
+```
+
+The gauge needs the true context-window size, which Claude Code hands **only** to
+the statusline — so the two host-event pieces install **out-of-pack**, in the
+operator's `~/.claude/settings.json` (no pack ships host hooks today):
+
+```json
+{
+  "statusLine": { "type": "command", "command": "python3 /path/to/cairn/scripts/statusline-tee.py" },
+  "hooks": { "UserPromptSubmit": [ { "hooks": [ { "type": "command",
+    "command": "python3 /path/to/cairn/scripts/context-gauge.py" } ] } ] }
+}
+```
+
+`statusline-tee.py` caches the window and delegates rendering to your existing
+statusline unchanged; `context-gauge.py` reads that cache and emits the gauge
+line. Both fail-silent — unwired or disabled, nothing changes. Thresholds, TTLs,
+and the model→window map all live in the `continuity` config block.
+
 ## Mounts: vault mode, repo mode, extra read mounts
 
 Per-city config (`.gc/services/cairn/config.json`, see
@@ -137,10 +175,12 @@ shipped as `obsidian` and became `cairn` with exactly these steps.)
 ```
 pack.toml                 mcp/cairn.template.toml        orders/cairn-recall.toml
 scripts/memory_common.py  scripts/memory_admin.py        scripts/memory_mcp.py
+scripts/continuity_common.py   scripts/context-gauge.py  scripts/statusline-tee.py
 commands/<cmd>/{command.toml,run.sh}                     skills/cairn/SKILL.md
-examples/config.example.json                             tests/test_memory.py
+examples/config.example.json   tests/test_memory.py      tests/test_continuity.py
 ```
 
-MIT licensed. Tests: `python3 tests/test_memory.py -v` (hermetic — tmpdirs only).
+MIT licensed. Tests (hermetic — tmpdirs only):
+`python3 -m unittest discover -s tests -v` (memory + continuity suites).
 
 *The stones remember. Add yours before you go.*
