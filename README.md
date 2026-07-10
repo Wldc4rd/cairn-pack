@@ -43,6 +43,35 @@ Gas Cities/                          # the tree (write_root points at its base)
 - **Humans co-own the cairn**: open the tree in Obsidian; edit or fix any
   note — the edit *is* the memory.
 
+## What's new in v0.2.0 — the continuity layer
+
+Cairn's mission was always agent continuity; v0.2.0 adds the layer the memory
+hierarchy was missing — the **working-memory / boot layer**. The disease it
+cures, observed in the field: after a session reset, fresh agents boot lost and
+re-litigate settled decisions; mid-session, agents that cannot see their own
+context develop *context anxiety* — sometimes at barely half-full — go
+lethargic, promise to "finish in a fresh session," and never actually reset.
+Those are one loop, and it breaks in two places: **deterministic boot** (a
+notepad read by path, never by ranking) and an **externalized reset decision**
+(a measured gauge + hard thresholds instead of nerves).
+
+New in this release, all **default-OFF**:
+
+- **notepad** — per-agent working-memory head: snapshot semantics, per-line UTC
+  stamps with section-aware TTLs, a rotating **echo-token** that makes the boot
+  echo falsifiable (an echo without the token is a confabulated boot).
+- **diary** — episodic WAL: milestone-appended entries, terminator-marked (no
+  terminator ⇒ successors treat it as a crash artifact and trust the tracker).
+- **context gauge** — the agent's *real* context %, teed into each turn, with a
+  dynamic per-session window (no hand-set denominators) and honest labels when
+  it must fall back (`(mapped)`, `(inferred)`, `(assumed)`).
+- **commands** — `continuity-init` / `continuity-status` / `continuity-handoff`.
+- 20 new hermetic tests; the 36 existing memory tests unbroken.
+
+The design was adversarially red-teamed twice and exercised end-to-end before
+packaging — including a live mid-task handoff fired at the urgent threshold
+during the very build that produced this release.
+
 ## Quick start
 
 ```sh
@@ -112,6 +141,60 @@ operator's `~/.claude/settings.json` (no pack ships host hooks today):
 statusline unchanged; `context-gauge.py` reads that cache and emits the gauge
 line. Both fail-silent — unwired or disabled, nothing changes. Thresholds, TTLs,
 and the model→window map all live in the `continuity` config block.
+
+### Deploying v0.2.0 to a city (mayor's checklist)
+
+**Upgrading an existing cairn city** — additive, nothing breaks: pull the pack
+(`git -C /path/to/cairn pull`), re-import (`gc import add /path/to/cairn`), and
+you're done — memory behavior is unchanged (the full pre-0.2.0 test suite runs
+unmodified), the `continuity` config block is absent-by-default, and no agent
+sees any change until you opt them in. **Fresh install**: the Quick start above,
+then return here.
+
+**Turning continuity on — staged, in this order:**
+
+1. Add the `continuity` block to `.gc/services/cairn/config.json` (copy from
+   `examples/config.example.json`): set `enabled: true` and list ONE low-stakes
+   agent in `enabled_agents`. Leave thresholds at 60/75/85 until you have local
+   evidence.
+2. `gc cairn continuity-init` — seeds that agent's notepad + diary (idempotent).
+3. Wire the two host pieces in the settings file **your agent sessions actually
+   load** (for gc-managed sessions that is the city's `.gc/settings.json`, not
+   the repo's `.claude/settings.json` — verify with the session's `--settings`
+   flag). Unwired, the gauge simply never appears and agents work as before.
+4. **Verify before widening**: `gc cairn continuity-status` (notepad age, TTL
+   tiers, diary, gauge heartbeat); confirm a real `context-gauge:` line in a
+   live session's turn; expect the 4-line boot echo — *with the token* — in the
+   agent's first report after its next restart.
+5. Widen: **named / heartbeat-driven agents first** — every wake samples the
+   gauge naturally, and long-lived sessions are where the anxiety disease
+   actually lives. Hold single-burst ephemeral workers back (see limitations).
+
+**Rollback** at any depth: delist the agent (or set `continuity.enabled:
+false`) — the gauge falls silent, the skill section stops binding, and the
+notepad/diary simply stop being read. Nothing else changes.
+
+### Known limitations (read before fleet-wide)
+
+- **Sampling is per prompt-event.** The gauge emits on `UserPromptSubmit`: idle
+  wakes, nudges, and heartbeats all sample — but a single long agentic turn can
+  burn 10→90% between samples, and **single-burst ephemeral workers get exactly
+  one sample at t=0** (correctly silent — no usage exists yet). A throttled
+  `PostToolUse` emitter is designed (see `POSTTOOLUSE-DESIGN-NOTE` in the repo
+  history / bead trail) but not yet shipped — hence "named agents first."
+- **No gauge line means UNKNOWN, never zero.** The skill says so; hold your
+  agents to it. A dead hook degrades to the pre-continuity status quo, silently
+  — check `continuity-status` for the gauge heartbeat when in doubt.
+- **The window is only as true as its source.** Best: the statusline tee
+  (ground truth per session). The fallbacks are labeled and honest, but
+  `(assumed)` on a 1M-tier session reads ~5× hot — wire the tee.
+- **Boot reads add startup weight.** On stores where session startup is already
+  slow, the heavier boot can interact with aggressive supervisor stall-resets.
+  If you see startup churn, that is a supervisor-tuning problem to fix first —
+  continuity makes it more visible, not worse.
+- **Hooks are provider-specific.** The shipped wiring targets Claude Code
+  settings; other providers need equivalent adapter lines (same scripts, same
+  stdin contract where available).
 
 ## Mounts: vault mode, repo mode, extra read mounts
 
