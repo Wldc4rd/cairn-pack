@@ -144,6 +144,15 @@ and the model→window map all live in the `continuity` config block.
 
 ### Deploying v0.2.0 to a city (mayor's checklist)
 
+> **⚠️ Clone-dir gotcha (first fleet deploy found it):** the pack directory
+> **must be named `cairn`** (it must match `pack.toml`'s `name`). GitHub's
+> default clone dir is `cairn-pack`, which registers the import as `cairn-pack`
+> and makes `gc cairn` an unknown command. Clone with an explicit target:
+>
+> ```sh
+> git clone https://github.com/Wldc4rd/cairn-pack.git cairn
+> ```
+
 **Upgrading an existing cairn city** — additive, nothing breaks: pull the pack
 (`git -C /path/to/cairn pull`), re-import (`gc import add /path/to/cairn`), and
 you're done — memory behavior is unchanged (the full pre-0.2.0 test suite runs
