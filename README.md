@@ -210,12 +210,20 @@ notepad/diary simply stop being read. Nothing else changes.
 Per-city config (`.gc/services/cairn/config.json`, see
 `examples/config.example.json`):
 
-- **`sync.mode: "vault"`** — the tree lives inside a vault whose own sync
-  machinery commits. **Cairn never runs git in vault mode** — so *before you
-  enable*, make sure that sync already checks out and covers the `Gas Cities/`
-  tree on this box; cairn will not create or fetch it for you. (First fleet
-  deploy hit this: a city's enable stayed correctly blocked until its vault
-  machinery covered the tree.)
+**Sync is your choice — Cairn requires none of it.** A vault is just a folder of
+markdown: on a single box with nothing synced, Cairn works fully and your stones
+are local files. If that folder *is* carried by an external sync — a whole-tree
+multi-city sync like Obsidian Sync / Syncthing / iCloud / a git-synced vault —
+Cairn is **compatible** with it and stays out of the way, so your sync
+distributes stones across boxes and cities. That whole-tree sync is fully
+supported but **not required**; pick the mode that fits your setup.
+
+- **`sync.mode: "vault"`** — the tree is a plain folder of markdown. **Cairn
+  never runs git in vault mode** — any sync over that folder is entirely yours.
+  *Only when you rely on such a sync to provide the tree on a box:* make sure it
+  has already checked out the `Gas Cities/` base there before you enable — cairn
+  won't create or fetch it. (First fleet deploy hit this: a city's enable stayed
+  correctly blocked until its vault sync covered the tree.)
 - **`sync.mode: "repo"`** — the city's slice lives in a standalone git clone,
   synced by `gc cairn sync` through a manifest-guarded wrapper
   (`gc-brain.toml` fences every git call; `core.symlinks=false` at init).
@@ -232,13 +240,18 @@ Per-city config (`.gc/services/cairn/config.json`, see
 > expects. After enabling, confirm with a test `remember` (or
 > `gc cairn continuity-status`) that the first stone appears at your sync source.
 
-> **Recommended multi-box fleet topology (the rollout standard).** On remote
-> boxes, give each city its **own city-local vault** (`sync.mode: "vault"`,
-> `write_root` at that box's `Gas Cities/` base) and mount a **one-way read-only
-> mirror of the shared nation `brain/`** through `read_roots`. Leave
-> `nation_write` at its default — nation-scope stones route to the fleet steward,
-> who lands them centrally, and they flow back to every city via the read-mirror.
-> No shared *writable* root need exist (rare to do safely across machines).
+> **Multi-box fleets are your call — Cairn assumes nothing.** It writes flat
+> markdown; whether and how your boxes share those files is entirely yours to
+> arrange (Gas City ships no cross-box sync of its own), and a single city on one
+> box needs none of it. If you *do* want boxes to share memory, two patterns that
+> work — both optional examples, not a requirement: **(a)** if some sync already
+> spans your boxes (Obsidian Sync, Syncthing, a shared git vault — whatever you
+> run), point each city's vault at the shared tree and let your sync carry the
+> stones; **(b)** otherwise, give each city its own local vault and mount a
+> one-way read-only mirror of the shared nation `brain/` via `read_roots`,
+> leaving `nation_write` at its default so nation-scope stones route to one
+> steward who lands them centrally. Cairn works the same either way — flat files,
+> your topology.
 
 **Write ownership** (conflict-free by construction): each agent stacks only its
 own cairn; city brains are written by that city; the nation brain is written by
